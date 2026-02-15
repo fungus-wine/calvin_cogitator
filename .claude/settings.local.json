@@ -1,0 +1,6 @@
+{
+  "additionalDirectories": [
+    "~/code/calvin_console",
+    "~/code/arduino",
+  ]
+}
