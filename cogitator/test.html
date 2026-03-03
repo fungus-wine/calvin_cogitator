@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calvin Cogitator — Sensor Stream</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+  h1 { font-size: 1.2em; margin-bottom: 12px; color: #8be9fd; }
+
+  #status {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    margin-bottom: 16px;
+  }
+  #status.connected    { background: #50fa7b33; color: #50fa7b; }
+  #status.disconnected { background: #ff555533; color: #ff5555; }
+  #status.reconnecting { background: #f1fa8c33; color: #f1fa8c; }
+
+  .card {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin-bottom: 12px;
+  }
+  .card h2 {
+    font-size: 0.95em;
+    color: #bd93f9;
+    margin-bottom: 8px;
+  }
+  .card .age {
+    float: right;
+    font-size: 0.75em;
+    color: #6272a4;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 2px 8px 2px 0; }
+  td:first-child { color: #8be9fd; width: 100px; }
+  td:last-child { text-align: right; }
+  #msg-count { font-size: 0.75em; color: #6272a4; margin-top: 12px; }
+</style>
+</head>
+<body>
+<h1>Calvin Cogitator — Sensor Stream</h1>
+<div id="status" class="disconnected">disconnected</div>
+
+<div class="card" id="card-imu">
+  <h2>sensor.imu <span class="age" id="age-imu">—</span></h2>
+  <table id="table-imu"><tr><td colspan="2">waiting…</td></tr></table>
+</div>
+
+<div class="card" id="card-tof">
+  <h2>sensor.tof <span class="age" id="age-tof">—</span></h2>
+  <table id="table-tof"><tr><td colspan="2">waiting…</td></tr></table>
+</div>
+
+<div class="card" id="card-i2c_health">
+  <h2>sensor.i2c_health <span class="age" id="age-i2c_health">—</span></h2>
+  <table id="table-i2c_health"><tr><td colspan="2">waiting…</td></tr></table>
+</div>
+
+<div id="msg-count">messages: 0</div>
+
+<script>
+(function () {
+  const WS_URL = "ws://localhost:5560";
+  const RECONNECT_MS = 2000;
+
+  const statusEl = document.getElementById("status");
+  const msgCountEl = document.getElementById("msg-count");
+  let msgCount = 0;
+  let ws = null;
+  const lastSeen = {};
+
+  function setStatus(s) {
+    statusEl.textContent = s;
+    statusEl.className = s;
+  }
+
+  function renderTable(topic, data) {
+    const key = topic.replace("sensor.", "");
+    const table = document.getElementById("table-" + key);
+    if (!table) return;
+    const rows = Object.entries(data)
+      .filter(([k]) => k !== "type")
+      .map(([k, v]) => {
+        const display = typeof v === "number" ? v.toFixed(4) : String(v);
+        return "<tr><td>" + k + "</td><td>" + display + "</td></tr>";
+      })
+      .join("");
+    table.innerHTML = rows || "<tr><td colspan='2'>empty</td></tr>";
+    lastSeen[key] = Date.now();
+  }
+
+  function updateAges() {
+    const now = Date.now();
+    for (const key of ["imu", "tof", "i2c_health"]) {
+      const el = document.getElementById("age-" + key);
+      if (lastSeen[key]) {
+        const ago = ((now - lastSeen[key]) / 1000).toFixed(1);
+        el.textContent = ago + "s ago";
+      }
+    }
+  }
+  setInterval(updateAges, 200);
+
+  function connect() {
+    setStatus("reconnecting");
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = function () {
+      setStatus("connected");
+    };
+
+    ws.onclose = function () {
+      setStatus("disconnected");
+      setTimeout(connect, RECONNECT_MS);
+    };
+
+    ws.onerror = function () {
+      ws.close();
+    };
+
+    ws.onmessage = function (evt) {
+      msgCount++;
+      msgCountEl.textContent = "messages: " + msgCount;
+      try {
+        var msg = JSON.parse(evt.data);
+        if (msg.topic && msg.data) {
+          renderTable(msg.topic, msg.data);
+        }
+      } catch (e) {
+        // ignore malformed
+      }
+    };
+  }
+
+  connect();
+})();
+</script>
+</body>
+</html>
