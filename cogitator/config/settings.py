@@ -17,6 +17,10 @@ SERIAL_RECONNECT_DELAY = 2.0  # seconds between reconnect attempts
 TOPIC_IMU = "sensor.imu"
 TOPIC_TOF = "sensor.tof"
 TOPIC_I2C_HEALTH = "sensor.i2c_health"
+TOPIC_CMD_PID = "command.pid"
+TOPIC_RSP_PID = "response.pid"
+TOPIC_CMD_PID_READ = "command.pid.read"
+TOPIC_RSP_PID_READ = "response.pid.read"
 
 # Map Teensy message "type" field to ZMQ topic
 MESSAGE_TYPE_TO_TOPIC = {

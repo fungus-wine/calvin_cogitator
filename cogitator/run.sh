@@ -28,6 +28,9 @@ else
 fi
 PIDS+=($!)
 
+python3 services/pid/pid_service.py &
+PIDS+=($!)
+
 python3 services/gateway/gateway_service.py &
 PIDS+=($!)
 

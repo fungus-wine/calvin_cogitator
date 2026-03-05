@@ -12,9 +12,18 @@ import zmq
 # search path so from config.settings import ... works regardless of where you run the script from.
 # parents[2] walks up two directories from the file's location.
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
-from config.settings import ZMQ_PUB_ADDR, MESSAGE_TYPE_TO_TOPIC
+from config.settings import (
+    ZMQ_PUB_ADDR, ZMQ_SUB_ADDR, MESSAGE_TYPE_TO_TOPIC,
+    TOPIC_CMD_PID, TOPIC_RSP_PID, TOPIC_CMD_PID_READ, TOPIC_RSP_PID_READ,
+)
 
 PUBLISH_HZ = 50  # roughly match real IMU rate
+
+# Default PID values returned for read requests in dummy mode
+DEFAULT_PID = {
+    "inner": {"kp": 1.0, "ki": 0.0, "kd": 0.0},
+    "outer": {"kp": 1.0, "ki": 0.0, "kd": 0.0},
+}
 
 
 def generate_imu(t: float) -> dict:
@@ -51,9 +60,20 @@ def generate_i2c_health() -> dict:
 
 def main():
     ctx = zmq.Context()
+
     pub = ctx.socket(zmq.PUB)
     pub.connect(ZMQ_PUB_ADDR)
+
+    sub = ctx.socket(zmq.SUB)
+    sub.connect(ZMQ_SUB_ADDR)
+    sub.subscribe(TOPIC_CMD_PID.encode())
+    sub.subscribe(TOPIC_CMD_PID_READ.encode())
+
+    poller = zmq.Poller()
+    poller.register(sub, zmq.POLLIN)
+
     print(f"dummy: publishing to {ZMQ_PUB_ADDR} at ~{PUBLISH_HZ} Hz")
+    print(f"dummy: listening for {TOPIC_CMD_PID} commands")
 
     interval = 1.0 / PUBLISH_HZ
     tick = 0
@@ -79,11 +99,27 @@ def main():
                 topic = MESSAGE_TYPE_TO_TOPIC[msg["type"]]
                 pub.send_multipart([topic.encode(), json.dumps(msg).encode()])
 
+            # Check for incoming commands (non-blocking)
+            events = dict(poller.poll(0))
+            if sub in events:
+                topic_bytes, payload_bytes = sub.recv_multipart()
+                cmd_topic = topic_bytes.decode()
+                data = json.loads(payload_bytes.decode())
+
+                if cmd_topic == TOPIC_CMD_PID:
+                    print(f"dummy: got PID command: {data}")
+                    response = {**data, "status": "confirmed"}
+                    pub.send_multipart([TOPIC_RSP_PID.encode(), json.dumps(response).encode()])
+                elif cmd_topic == TOPIC_CMD_PID_READ:
+                    print("dummy: got PID read request")
+                    pub.send_multipart([TOPIC_RSP_PID_READ.encode(), json.dumps(DEFAULT_PID).encode()])
+
             tick += 1
             time.sleep(interval)
     except KeyboardInterrupt:
         pass
     finally:
+        sub.close()
         pub.close()
         ctx.term()
 
