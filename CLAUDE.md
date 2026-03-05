@@ -46,13 +46,41 @@
 - Video/audio streaming to explorator
 - Telemetry aggregation and forwarding
 
-## Impelementation Plan
+## Project Structure
+
+```
+calvin_cogitator/
+├── requirements.txt          # pyzmq, pyserial, websockets
+├── cogitator/
+│   ├── run.sh                # Process launcher (--dummy flag for fake data)
+│   ├── broker.py             # ZMQ XPUB/XSUB broker (central message hub)
+│   ├── test.html             # WebSocket gateway test page
+│   ├── config/
+│   │   └── settings.py       # ZMQ addresses, WS config, serial config, topic names
+│   └── services/
+│       ├── gateway/
+│       │   └── gateway_service.py   # Bridges ZMQ bus ↔ WebSocket (for explorator)
+│       ├── serial/
+│       │   └── serial_service.py    # Reads Teensy UART, publishes to ZMQ bus
+│       └── dummy/
+│           └── dummy_service.py     # Generates fake sensor data for testing
+```
+
+## Architecture
+
+- **ZMQ Broker** (`broker.py`): XPUB/XSUB proxy on ports 5550/5551 — all services publish/subscribe through it
+- **Serial Service**: Reads JSON messages from Teensy over UART, maps message types to ZMQ topics (`sensor.imu`, `sensor.tof`, `sensor.i2c_health`)
+- **Gateway Service**: Bridges ZMQ subscriptions to WebSocket on port 5560 for explorator
+- **Dummy Service**: Replaces serial service with synthetic data for development/testing
+- **run.sh**: Launches broker + gateway + serial (or `--dummy`) as background processes
+
+## Implementation Plan
 
 **Phase 1: (Complete)**
-- create ZMQ broker
-- create gateway service (Bridges ZMQ bus to websocket)
-- create serial service (Reads Teensy UART, publishes sensor data to ZMQ bus)
-- create dummy service (generates fake data to mimic Teensy for testing)
-- crate test.html to test gateway
+- ZMQ broker
+- Gateway service (ZMQ bus → WebSocket)
+- Serial service (Teensy UART → ZMQ bus)
+- Dummy service (fake sensor data for testing)
+- test.html for gateway testing
 
 **Phase 2: (TBD)**

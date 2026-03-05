@@ -8,6 +8,9 @@ import zmq
 import zmq.asyncio
 import websockets
 
+# This is a workaround for Python's import system — it adds the cogitator/ directory to the module
+# search path so from config.settings import ... works regardless of where you run the script from.
+# parents[2] walks up two directories from the file's location.exp
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
 from config.settings import WS_HOST, WS_PORT, ZMQ_SUB_ADDR
 

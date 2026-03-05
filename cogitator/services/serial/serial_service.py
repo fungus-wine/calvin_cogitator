@@ -7,6 +7,9 @@ import sys
 import serial
 import zmq
 
+# This is a workaround for Python's import system — it adds the cogitator/ directory to the module
+# search path so from config.settings import ... works regardless of where you run the script from.
+# parents[2] walks up two directories from the file's location.
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
 from config.settings import (
     SERIAL_DEVICE,
@@ -49,7 +52,7 @@ def main():
             if not raw:
                 continue
 
-            line = raw.decode("utf-8", errors="replace").strip()
+            line = raw.decode("utf-8", errors="replace").strip() # turn bytes into strings
             if not line:
                 continue
 
@@ -60,7 +63,7 @@ def main():
                 continue
 
             msg_type = msg.get("type")
-            topic = MESSAGE_TYPE_TO_TOPIC.get(msg_type)
+            topic = MESSAGE_TYPE_TO_TOPIC.get(msg_type) # returns None if key is missing
             if topic is None:
                 print(f"serial: unknown type: {msg_type}")
                 continue

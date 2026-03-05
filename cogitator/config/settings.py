@@ -1,6 +1,6 @@
 # ZMQ broker
-ZMQ_FRONTEND = "tcp://*:5550"       # services connect here to publish
-ZMQ_BACKEND = "tcp://*:5551"        # subscribers connect here
+ZMQ_PUB_SIDE = "tcp://*:5550"       # services connect here to publish
+ZMQ_SUB_SIDE = "tcp://*:5551"       # subscribers connect here
 ZMQ_PUB_ADDR = "tcp://localhost:5550"
 ZMQ_SUB_ADDR = "tcp://localhost:5551"
 
