@@ -74,6 +74,15 @@ calvin_cogitator/
 - **Dummy Service**: Replaces serial service with synthetic data for development/testing
 - **run.sh**: Launches broker + gateway + serial (or `--dummy`) as background processes
 
+## Message Format (initial, simple)
+Teensy sends newline-delimited JSON. Serial service republishes as-is with a topic prefix.
+
+```json
+{"type": "imu", "ax": 0.1, "ay": -0.02, "az": 9.8, "gx": 0.5, "gy": -0.1, "gz": 0.0}
+{"type": "tof", "front": 250, "rear": 180}
+{"type": "i2c_health", "nacks": 0, "timeouts": 0, "resets": 0}
+```
+
 ## Implementation Plan
 
 **Phase 1: (Complete)**
@@ -82,5 +91,7 @@ calvin_cogitator/
 - Serial service (Teensy UART → ZMQ bus)
 - Dummy service (fake sensor data for testing)
 - test.html for gateway testing
+
+
 
 **Phase 2: (TBD)**
