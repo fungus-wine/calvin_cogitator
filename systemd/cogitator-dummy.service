@@ -1,0 +1,16 @@
+[Unit]
+Description=Calvin Cogitator Dummy Service (testing)
+After=cogitator-broker.service
+Requires=cogitator-broker.service
+Conflicts=cogitator-serial.service cogitator-pid.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/cogitator
+Environment=PYTHONPATH=/opt/cogitator
+ExecStart=/usr/bin/python3 services/dummy/dummy_service.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

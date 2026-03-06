@@ -1,7 +1,11 @@
 """XPUB/XSUB broker — central hub for all ZMQ traffic."""
 
+import logging
+
 import zmq
 from config.settings import ZMQ_PUB_SIDE, ZMQ_SUB_SIDE
+
+log = logging.getLogger("broker")
 
 
 def main():
@@ -10,7 +14,7 @@ def main():
     pub_side.bind(ZMQ_PUB_SIDE)
     sub_side = ctx.socket(zmq.XPUB)
     sub_side.bind(ZMQ_SUB_SIDE)
-    print(f"broker: XSUB on {ZMQ_PUB_SIDE}, XPUB on {ZMQ_SUB_SIDE}")
+    log.info("XSUB on %s, XPUB on %s", ZMQ_PUB_SIDE, ZMQ_SUB_SIDE)
     try:
         zmq.proxy(pub_side, sub_side)
     except KeyboardInterrupt:
@@ -22,4 +26,5 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format="%(name)s: %(message)s", level=logging.INFO)
     main()

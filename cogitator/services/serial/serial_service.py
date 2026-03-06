@@ -1,16 +1,12 @@
 """Reads Teensy UART, publishes sensor data to ZMQ bus."""
 
 import json
+import logging
 import time
-import sys
 
 import serial
 import zmq
 
-# This is a workaround for Python's import system — it adds the cogitator/ directory to the module
-# search path so from config.settings import ... works regardless of where you run the script from.
-# parents[2] walks up two directories from the file's location.
-sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
 from config.settings import (
     SERIAL_DEVICE,
     SERIAL_BAUD,
@@ -19,15 +15,17 @@ from config.settings import (
     MESSAGE_TYPE_TO_TOPIC,
 )
 
+log = logging.getLogger("serial")
+
 
 def open_serial(device: str, baud: int) -> serial.Serial:
     while True:
         try:
             port = serial.Serial(device, baud, timeout=0.1)
-            print(f"serial: opened {device} @ {baud}")
+            log.info("opened %s @ %d", device, baud)
             return port
         except serial.SerialException as exc:
-            print(f"serial: {exc} — retrying in {SERIAL_RECONNECT_DELAY}s")
+            log.warning("%s — retrying in %ss", exc, SERIAL_RECONNECT_DELAY)
             time.sleep(SERIAL_RECONNECT_DELAY)
 
 
@@ -35,7 +33,7 @@ def main():
     ctx = zmq.Context()
     pub = ctx.socket(zmq.PUB)
     pub.connect(ZMQ_PUB_ADDR)
-    print(f"serial: publishing to {ZMQ_PUB_ADDR}")
+    log.info("publishing to %s", ZMQ_PUB_ADDR)
 
     port = open_serial(SERIAL_DEVICE, SERIAL_BAUD)
 
@@ -44,7 +42,7 @@ def main():
             try:
                 raw = port.readline()
             except serial.SerialException as exc:
-                print(f"serial: lost connection — {exc}")
+                log.warning("lost connection — %s", exc)
                 port.close()
                 port = open_serial(SERIAL_DEVICE, SERIAL_BAUD)
                 continue
@@ -52,20 +50,20 @@ def main():
             if not raw:
                 continue
 
-            line = raw.decode("utf-8", errors="replace").strip() # turn bytes into strings
+            line = raw.decode("utf-8", errors="replace").strip()
             if not line:
                 continue
 
             try:
                 msg = json.loads(line)
             except json.JSONDecodeError:
-                print(f"serial: bad json: {line!r}")
+                log.warning("bad json: %r", line)
                 continue
 
             msg_type = msg.get("type")
-            topic = MESSAGE_TYPE_TO_TOPIC.get(msg_type) # returns None if key is missing
+            topic = MESSAGE_TYPE_TO_TOPIC.get(msg_type)
             if topic is None:
-                print(f"serial: unknown type: {msg_type}")
+                log.warning("unknown type: %s", msg_type)
                 continue
 
             pub.send_multipart([topic.encode(), json.dumps(msg).encode()])
@@ -78,4 +76,5 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format="%(name)s: %(message)s", level=logging.INFO)
     main()

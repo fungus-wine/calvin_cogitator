@@ -1,12 +1,12 @@
-
 {
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(ls:*)"
+    ]
+  },
   "additionalDirectories": [
     "~/code/calvin_console",
     "~/code/arduino"
-  ],
-  "permissions": {
-    "allow": [
-      "Bash(grep:*)"
-    ]
-  }
+  ]
 }

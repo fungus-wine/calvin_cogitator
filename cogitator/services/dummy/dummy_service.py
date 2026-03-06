@@ -1,21 +1,19 @@
 """Generates fake sensor data and publishes to ZMQ bus — drop-in replacement for serial service."""
 
 import json
+import logging
 import math
 import random
-import sys
 import time
 
 import zmq
 
-# This is a workaround for Python's import system — it adds the cogitator/ directory to the module
-# search path so from config.settings import ... works regardless of where you run the script from.
-# parents[2] walks up two directories from the file's location.
-sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
 from config.settings import (
     ZMQ_PUB_ADDR, ZMQ_SUB_ADDR, MESSAGE_TYPE_TO_TOPIC,
     TOPIC_CMD_PID, TOPIC_RSP_PID, TOPIC_CMD_PID_READ, TOPIC_RSP_PID_READ,
 )
+
+log = logging.getLogger("dummy")
 
 PUBLISH_HZ = 50  # roughly match real IMU rate
 
@@ -72,11 +70,12 @@ def main():
     poller = zmq.Poller()
     poller.register(sub, zmq.POLLIN)
 
-    print(f"dummy: publishing to {ZMQ_PUB_ADDR} at ~{PUBLISH_HZ} Hz")
-    print(f"dummy: listening for {TOPIC_CMD_PID} commands")
+    log.info("publishing to %s at ~%d Hz", ZMQ_PUB_ADDR, PUBLISH_HZ)
+    log.info("listening for %s commands", TOPIC_CMD_PID)
 
     interval = 1.0 / PUBLISH_HZ
     tick = 0
+    next_tick = time.monotonic()
 
     try:
         while True:
@@ -107,15 +106,16 @@ def main():
                 data = json.loads(payload_bytes.decode())
 
                 if cmd_topic == TOPIC_CMD_PID:
-                    print(f"dummy: got PID command: {data}")
+                    log.info("got PID command: %s", data)
                     response = {**data, "status": "confirmed"}
                     pub.send_multipart([TOPIC_RSP_PID.encode(), json.dumps(response).encode()])
                 elif cmd_topic == TOPIC_CMD_PID_READ:
-                    print("dummy: got PID read request")
+                    log.info("got PID read request")
                     pub.send_multipart([TOPIC_RSP_PID_READ.encode(), json.dumps(DEFAULT_PID).encode()])
 
             tick += 1
-            time.sleep(interval)
+            next_tick += interval
+            time.sleep(max(0, next_tick - time.monotonic()))
     except KeyboardInterrupt:
         pass
     finally:
@@ -125,4 +125,5 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format="%(name)s: %(message)s", level=logging.INFO)
     main()

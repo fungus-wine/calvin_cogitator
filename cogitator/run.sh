@@ -15,6 +15,7 @@ cleanup() {
 trap cleanup INT TERM
 
 cd "$DIR"
+export PYTHONPATH="$DIR"
 
 python3 broker.py &
 PIDS+=($!)
@@ -23,13 +24,14 @@ sleep 0.5  # let broker bind
 if [[ "${1:-}" == "--dummy" ]]; then
     echo "using dummy sensor data"
     python3 services/dummy/dummy_service.py &
+    PIDS+=($!)
 else
     python3 services/serial/serial_service.py &
-fi
-PIDS+=($!)
+    PIDS+=($!)
 
-python3 services/pid/pid_service.py &
-PIDS+=($!)
+    python3 services/pid/pid_service.py &
+    PIDS+=($!)
+fi
 
 python3 services/gateway/gateway_service.py &
 PIDS+=($!)

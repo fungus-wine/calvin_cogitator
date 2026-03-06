@@ -1,28 +1,26 @@
 """Bridges ZMQ bus to websocket for explorator."""
 
 import asyncio
+import functools
 import json
-import sys
+import logging
 
 import zmq
 import zmq.asyncio
 import websockets
 
-# This is a workaround for Python's import system — it adds the cogitator/ directory to the module
-# search path so from config.settings import ... works regardless of where you run the script from.
-# parents[2] walks up two directories from the file's location.exp
-sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
-from config.settings import WS_HOST, WS_PORT, ZMQ_PUB_ADDR, ZMQ_SUB_ADDR
+from config.settings import WS_HOST, WS_PORT, ZMQ_PUB_ADDR, ZMQ_SUB_ADDR, GW_SUBSCRIBE_PREFIXES
+
+log = logging.getLogger("gateway")
 
 
 clients: set[websockets.WebSocketServerProtocol] = set()
-zmq_pub = None  # set in main()
 
 
-async def ws_handler(ws: websockets.WebSocketServerProtocol):
+async def ws_handler(ws: websockets.WebSocketServerProtocol, zmq_pub: zmq.asyncio.Socket):
     clients.add(ws)
     remote = ws.remote_address
-    print(f"gateway: client connected from {remote}")
+    log.info("client connected from %s", remote)
     try:
         async for message in ws:
             try:
@@ -31,30 +29,37 @@ async def ws_handler(ws: websockets.WebSocketServerProtocol):
                 data = msg.get("data", {})
                 zmq_pub.send_multipart([topic.encode(), json.dumps(data).encode()])
             except (json.JSONDecodeError, AttributeError) as e:
-                print(f"gateway: bad message from client: {e}")
+                log.warning("bad message from client: %s", e)
     except websockets.ConnectionClosed:
         pass
     finally:
         clients.discard(ws)
-        print(f"gateway: client disconnected {remote}")
+        log.info("client disconnected %s", remote)
 
 
-async def zmq_to_ws():
-    ctx = zmq.asyncio.Context()
+async def zmq_to_ws(ctx: zmq.asyncio.Context):
     sub = ctx.socket(zmq.SUB)
     sub.connect(ZMQ_SUB_ADDR)
-    sub.subscribe(b"sensor.")
-    sub.subscribe(b"response.")
-    print(f"gateway: subscribed to sensor.* and response.* on {ZMQ_SUB_ADDR}")
+    for prefix in GW_SUBSCRIBE_PREFIXES:
+        sub.subscribe(prefix.encode())
+    log.info("subscribed to %s on %s", [p + "*" for p in GW_SUBSCRIBE_PREFIXES], ZMQ_SUB_ADDR)
 
     try:
         while True:
-            topic_bytes, payload_bytes = await sub.recv_multipart()
+            frames = await sub.recv_multipart()
+            if len(frames) != 2:
+                log.warning("expected 2-part message, got %d — skipping", len(frames))
+                continue
+            topic_bytes, payload_bytes = frames
             topic = topic_bytes.decode()
-            payload = payload_bytes.decode()
 
-            # Wrap in envelope so explorator knows the topic
-            envelope = json.dumps({"topic": topic, "data": json.loads(payload)})
+            try:
+                data = json.loads(payload_bytes.decode())
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                log.warning("bad payload on %s: %s", topic, e)
+                continue
+
+            envelope = json.dumps({"topic": topic, "data": data})
 
             dead = set()
             for ws in clients:
@@ -65,20 +70,20 @@ async def zmq_to_ws():
             clients.difference_update(dead)
     finally:
         sub.close()
-        ctx.term()
 
 
 async def main():
-    global zmq_pub
     ctx = zmq.asyncio.Context()
     zmq_pub = ctx.socket(zmq.PUB)
     zmq_pub.connect(ZMQ_PUB_ADDR)
-    print(f"gateway: publishing commands to {ZMQ_PUB_ADDR}")
+    log.info("publishing commands to %s", ZMQ_PUB_ADDR)
 
-    async with websockets.serve(ws_handler, WS_HOST, WS_PORT):
-        print(f"gateway: websocket server on ws://{WS_HOST}:{WS_PORT}")
-        await zmq_to_ws()
+    handler = functools.partial(ws_handler, zmq_pub=zmq_pub)
+    async with websockets.serve(handler, WS_HOST, WS_PORT):
+        log.info("websocket server on ws://%s:%d", WS_HOST, WS_PORT)
+        await zmq_to_ws(ctx)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format="%(name)s: %(message)s", level=logging.INFO)
     asyncio.run(main())
